@@ -302,7 +302,10 @@ function App() {
       </main>
 
       {overlay?.kind === 'briefing' && <Dialog title="Game 5 briefing" close={() => setOverlay(null)}>
-        <video className="briefing-video" controls autoPlay={!reducedMotion} playsInline poster={`${staticMedia}river-crossing.webp`} preload="metadata" src={`${staticMedia}briefing.mp4`} aria-label="Animated Game 5 briefing" />
+        <video className="briefing-video" controls autoPlay={!reducedMotion} muted playsInline poster={`${staticMedia}river-crossing.webp`} preload={reducedMotion ? 'metadata' : 'auto'} aria-label="Animated Game 5 briefing">
+          <source src={`${staticMedia}briefing.webm`} type="video/webm" />
+          <source src={`${staticMedia}briefing.mp4`} type="video/mp4" />
+        </video>
         <p className="dialog-note">Champions picked earlier in a Fearless series lock for both teams. Replace one Game 4 pick to see who returns to the Game 5 pool.</p>
       </Dialog>}
       {details && <Dialog title={`Game ${details.number} draft`} close={() => setOverlay(null)}>
