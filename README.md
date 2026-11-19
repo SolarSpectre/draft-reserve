@@ -4,7 +4,9 @@ Draft Reserve is a League of Legends coaching tool for rehearsing late-series Fu
 
 ## Run the demo
 
-Use Node.js 24 and npm. From the project directory, run:
+Open the [public demo](https://draft-reserve.vercel.app/) or run it locally with Node.js 24 and npm.
+
+From the project directory, run:
 
 ```sh
 npm ci
@@ -41,6 +43,6 @@ Vite writes the static site to `dist/`. For Vercel, import the repository, selec
 
 ## JetBrains tooling
 
-The frontend was inspected in WebStorm 2026.3 with the shared [Draft Reserve inspection profile](.idea/inspectionProfiles/Draft_Reserve.xml). The profile checks TypeScript references and unused JavaScript or TypeScript symbols. To reproduce it, open the project in WebStorm, select **Draft Reserve** in the inspection settings, and run **Inspect Code** on `src`.
+The frontend was inspected in WebStorm 2026.3 with the shared [Draft Reserve inspection profile](.idea/inspectionProfiles/Draft_Reserve.xml). WebStorm flagged a nested exception used to handle malformed import files. The import now handles JSON syntax and schema errors in the same error handler. To reproduce the inspection, open the project in WebStorm, select **Draft Reserve** in the inspection settings, and run **Inspect Code** on `src`.
 
 See [methodology](docs/methodology.md) for scouting definitions and [design](docs/design.md) for the visual system and artwork source.

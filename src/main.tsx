@@ -128,16 +128,18 @@ function App() {
     const attempt = ++importSequence.current;
     setImportError('');
     try {
-      const text = await file.text();
-      let raw: unknown;
-      try { raw = JSON.parse(text); } catch { throw new Error('This file is not valid JSON. Choose an export from the GRID importer.'); }
-      const imported = parsePack(raw);
+      const imported = parsePack(JSON.parse(await file.text()));
       if (attempt !== importSequence.current) return;
       selectDesk(chooseDesk(imported));
       setCohort('Late series');
       setSamePatch(false);
     } catch (error) {
-      if (attempt === importSequence.current) setImportError(error instanceof Error ? error.message : 'The draft export could not be read.');
+      if (attempt !== importSequence.current) return;
+      if (error instanceof SyntaxError) {
+        setImportError('This file is not valid JSON. Choose an export from the GRID importer.');
+      } else {
+        setImportError(error instanceof Error ? error.message : 'The draft export could not be read.');
+      }
     }
   }
 
