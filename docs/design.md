@@ -1,22 +1,22 @@
 # Draft Reserve design
 
-Draft Reserve is a League-inspired broadcast desk for rehearsing one decision between Games 4 and 5. The series timeline leads into two draft states, a shared lockout difference, opponent evidence, and a prep note a coach can copy.
+Draft Reserve uses an esports broadcast scoreboard above an interactive replay. The same board holds the original pick, a proposed replacement, the lockout changes, and opponent evidence.
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Ink | `#0b141a` | Canvas and pauses between sections |
-| Slate | `#101e27` | Draft and evidence surfaces |
-| Brass | `#dec08a` | Current game, focus of the comparison, and main actions |
-| River teal | `#8bdbcb` | Reopened champions |
-| Ember | `#e7a890` | Newly locked champions |
+| Navy | `#09121f` | Page background |
+| Slate | `#101e2d` | Replay surfaces and controls |
+| Cyan | `#64e3f2` | Current game, main action, and the left scoreboard team |
+| Seafoam | `#a7ede7` | Reopened picks |
+| Coral | `#ffc1b1` | Newly locked picks and the right scoreboard team |
 
-Cinzel sets titles and champion names. Barlow carries controls, dense evidence, and tabular counts. Put labels beside color changes so the difference is readable by text alone. Keep the desktop comparison and evidence adjacent. Stack the evidence below the comparison on narrow screens.
+Barlow is used across the replay. Text labels accompany color changes. The draft and scouting panels sit side by side on desktop and stack on narrow screens.
 
-Use Motion for the replacement crest, lockout difference, and scouting rows. Keep these transitions under 300 ms. Respect the user's reduced-motion setting and play the briefing only when opened. The motion tells the coach which champion returns and which leaves.
+Motion animates the lockout changes and scouting bars. The replay button plays the lockout transition on demand. Reduced-motion preferences disable the transition and briefing autoplay.
 
 ## Prototype
 
-Use Node 24, then run `npm ci` and `npm run dev`. The mock series, champion names, and scouting counts are fictional. `npm run build` type-checks the code and builds the site into `dist`.
+Use Node 24, then run `npm ci` and `npm run dev`. The sample series and its scouting counts are fictional. Champion names and portraits come from the same pinned Riot Data Dragon catalog used for imported GRID matches. `npm run build` type-checks the code and builds the site into `dist`.
 
 The artwork and briefing live in `public/media/`. The built-in image generation tool created the landscape. The short silent briefing uses that original still with camera movement and three title cards.
 

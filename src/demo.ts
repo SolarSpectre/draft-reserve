@@ -9,6 +9,14 @@ const names = [
   'Gale', 'Mirth', 'Selka', 'Daxen', 'Kell', 'Soren', 'Vire', 'Aylen', 'Cairn', 'Brunna',
 ];
 const key = (name: string) => name.toLowerCase();
+const championNames = [
+  'Renekton', 'Jarvan IV', 'Ahri', 'Jinx', 'Nautilus', 'Gnar', 'Vi', 'Sylas', 'Aphelios', 'Thresh',
+  'Kennen', 'Lee Sin', 'LeBlanc', 'Kai’Sa', 'Rakan', 'K’Sante', 'Sejuani', 'Ryze', 'Xayah', 'Braum',
+  'Rumble', 'Xin Zhao', 'Galio', 'Ezreal', 'Leona', 'Ornn', 'Wukong', 'Viktor', 'Smolder', 'Alistar',
+  'Ambessa', 'Nocturne', 'Azir', 'Varus', 'Neeko', 'Sion', 'Poppy', 'Yone', 'Lucian', 'Nami',
+  'Orianna', 'Taliyah', 'Syndra', 'Corki', 'Maokai', 'Tristana', 'Kalista', 'Ashe', 'Aatrox', 'Ivern',
+  'Bard', 'Zeri', 'Aurora', 'Gwen', 'Karma', 'Blitzcrank', 'Akali', 'Pantheon', 'Ziggs', 'Senna',
+];
 const event = 'Fictional best of five';
 const patch = '26.10';
 const coverage = { picks: true, bans: true };
@@ -54,9 +62,8 @@ export const demoPack: DraftPack = {
   version: 1,
   source: 'demo',
   teams: { northstar: 'Northstar', emberline: 'Emberline', ...Object.fromEntries(historyTeams.map(name => [key(name), name])) },
-  champions: Object.fromEntries(names.map(name => [key(name), name])),
+  champions: Object.fromEntries(names.map((name, index) => [key(name), championNames[index]])),
   series: [reference, ...history],
 };
 
 export const demoSeriesId = reference.id;
-export const demoChampionStyle: Record<string, string> = { morrow: '#d6ae77', vesper: '#a5a0dc', ilex: '#8ecac0', calder: '#d4947c' };

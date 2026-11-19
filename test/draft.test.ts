@@ -2,8 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getSwapOptions, parsePack } from '../src/draft.ts';
 import { demoPack } from '../src/demo.ts';
+import { championImage } from '../src/champion-art.ts';
 
 const draftPack = () => parsePack(structuredClone(demoPack));
+
+test('champion portraits resolve to official filenames independently of display punctuation', () => {
+  assert.match(championImage('K’Sante'), /\/KSante\.png$/);
+  assert.match(championImage('Wukong'), /\/MonkeyKing\.png$/);
+  assert.equal(championImage('Unknown champion'), undefined);
+  for (const name of Object.values(demoPack.champions)) assert.ok(championImage(name), name);
+});
 
 test('the same Fearless lockout applies to both teams, and a legal Game 4 swap changes exactly two names', () => {
   const pack = draftPack();

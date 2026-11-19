@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -12,7 +14,6 @@
   },
   "dependencies": {
     "@fontsource/barlow": "^5.2.0",
-    "@fontsource/cinzel": "^5.2.0",
     "lucide-react": "^0.468.0",
     "motion": "^12.0.0",
     "react": "^19.2.0",

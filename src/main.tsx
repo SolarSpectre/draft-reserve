@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import { ArrowDown, ArrowDownLeft, ArrowDownRight, ArrowLeftRight, ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, FileUp, LockKeyhole, Play, RotateCcw, Shield, Swords, UnlockKeyhole, X } from 'lucide-react';
+import { domAnimation, LazyMotion, m, MotionConfig, useReducedMotion } from 'motion/react';
+import { ArrowDownRight, ArrowRight, Check, ChevronDown, ChevronRight, Copy, FileUp, LockKeyhole, Play, RotateCcw, UnlockKeyhole, X } from 'lucide-react';
 import '@fontsource/barlow/latin-400.css';
 import '@fontsource/barlow/latin-500.css';
 import '@fontsource/barlow/latin-600.css';
 import '@fontsource/barlow/latin-700.css';
-import '@fontsource/cinzel/latin-500.css';
-import '@fontsource/cinzel/latin-600.css';
 import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getReplaySeries, getSwapOptions, isCloud9, parsePack, type Checkpoint, type Cohort, type DraftPack, type DraftSeries } from './draft';
-import { demoChampionStyle, demoPack, demoSeriesId } from './demo';
+import { demoPack, demoSeriesId } from './demo';
+import { championImage } from './champion-art';
 import './styles.css';
 
 type Overlay = { kind: 'briefing' } | { kind: 'game'; number: number } | { kind: 'evidence'; champion: string } | { kind: 'restrictions' };
@@ -28,8 +27,14 @@ function chooseDesk(pack: DraftPack, series?: DraftSeries, own?: string, target?
   return { pack, series: active, own: team, target: at, pick: narrative ? 'morrow' : firstPick, replacement: narrative ? 'vesper' : '', backup: '', disabled: [] };
 }
 
-function Crest({ name, color = '#cbb088', small = false }: { name: string; color?: string; small?: boolean }) {
-  return <span className={`crest${small ? ' crest-small' : ''}`} style={{ '--crest-color': color } as CSSProperties} aria-hidden="true">{[...name][0]}</span>;
+function ChampionPortrait({ name, small = false }: { name?: string; small?: boolean }) {
+  const src = name ? championImage(name) : undefined;
+  const [broken, setBroken] = useState<string>();
+  const size = small ? 28 : 72;
+  return <span className={`champion-portrait${small ? ' portrait-small' : ''}`} aria-hidden="true">
+    {name ? [...name][0] : '—'}
+    {src && src !== broken && <img src={src} width={size} height={size} alt="" decoding="async" loading={small ? 'lazy' : 'eager'} onError={() => setBroken(src)} />}
+  </span>;
 }
 
 function Dialog({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
@@ -61,12 +66,17 @@ function App() {
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [importError, setImportError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
+  const [replay, setReplay] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+  const replacementInput = useRef<HTMLSelectElement>(null);
   const importSequence = useRef(0);
   const reducedMotion = useReducedMotion();
   const { pack, series, own, target, pick, replacement, disabled } = desk;
   const { teams, champions } = pack;
   const opponent = series.teamIds.find(id => id !== own)!;
+  const ownName = teams[own];
+  const opponentName = teams[opponent];
+  const isGrid = pack.source === 'grid';
   const status = getCheckpoint(series, target);
   const checkpoint = status.kind === 'ready' ? status : null;
   const previous = series.games.find(game => game.number === target - 1);
@@ -155,50 +165,36 @@ function App() {
     }
   }
 
+  function goToComparison() {
+    document.getElementById('change-pick')?.scrollIntoView({ block: 'nearest' });
+    if (replacementInput.current && !replacementInput.current.disabled) replacementInput.current.focus({ preventScroll: true });
+  }
+
   return (
     <MotionConfig reducedMotion="user" transition={{ type: 'spring', stiffness: 320, damping: 34 }}>
-      <a className="skip-link" href="#draft-desk">Skip to the draft desk</a>
+      <a className="skip-link" href="#draft-desk">Skip to the draft controls</a>
       <header className="masthead">
         <div className="wrap masthead-inner">
-          <a className="wordmark" href="#top" aria-label="Draft Reserve home"><span className="brand-mark"><Swords size={19} strokeWidth={1.5} /></span>Draft Reserve</a>
-          <nav aria-label="Workspace"><a className="nav-current" href="#draft-desk">Draft desk</a><a href="#scouting">Scouting</a></nav>
-          <button className="subtle-button header-briefing" type="button" onClick={() => setOverlay({ kind: 'briefing' })}><Play size={13} /> <span>Watch briefing</span></button>
+          <a className="wordmark" href="#top"><span className="brand-mark" aria-hidden="true" />Draft Reserve</a>
+          <nav aria-label="Workspace"><a className="nav-current" href="#draft-desk">Series replay</a><a href="#scouting">Scouting</a></nav>
+          <span className="source-label"><i aria-hidden="true" />{isGrid ? 'Local GRID data' : 'Fictional series'}</span>
         </div>
       </header>
 
       <main id="top" className="wrap">
-        <section className="hero" aria-labelledby="hero-title">
-          <img className="hero-art" src={`${staticMedia}river-crossing.webp`} alt="" fetchPriority="high" />
-          <div className="hero-content">
-            <span className="hero-kicker"><span className="diamond" /> Fearless Draft</span>
-            <h1 id="hero-title">Hold for Game 5<span>.</span></h1>
-            <p>Change one Game 4 pick. See what it opens up for the decider.</p>
-            <a className="hero-link" href="#draft-desk">Open draft desk <ArrowDown size={15} aria-hidden="true" /></a>
+        <div className="replay-title" data-enter>
+          <div>
+            <p className="section-label">Full Fearless Draft</p>
+            <h1>Game {target} replay</h1>
           </div>
-          <button className="video-teaser" type="button" onClick={() => setOverlay({ kind: 'briefing' })}>
-            <span className="play-icon"><Play size={15} fill="currentColor" /></span>
-            <span><strong>Game 5 briefing</strong><small>00:08</small></span>
-          </button>
-        </section>
-
-        <section className="series-rail" aria-labelledby="series-title">
-          <div className="series-meta">
-            <span className="series-label">{series.event}{pack.source === 'grid' && ` · ${formatDate.format(new Date(series.startedAt))}`}</span>
-            <h2 id="series-title"><span>{teams[series.teamIds[0]]}</span><span className="series-score" aria-label={scoreComplete ? `${scores[0]} to ${scores[1]}` : 'Incomplete score'}>{scoreComplete ? `${scores[0]}–${scores[1]}` : '—'}</span><span>{teams[series.teamIds[1]]}</span></h2>
+          <div className="title-actions">
+            <button className="subtle-button header-briefing" type="button" onClick={() => setOverlay({ kind: 'briefing' })}><Play size={14} aria-hidden="true" /> Watch briefing</button>
+            <button type="button" className="primary-button" onClick={goToComparison}>Compare a pick <ArrowDownRight size={17} aria-hidden="true" /></button>
           </div>
-          <div className="rounds" aria-label="Series draft timeline">
-            {Array.from({ length: target - 1 }, (_, index) => {
-              const game = series.games.find(entry => entry.number === index + 1);
-              return <button key={index} type="button" className="round" disabled={!game} aria-label={`View Game ${index + 1} draft${game?.winnerId ? `, ${teams[game.winnerId]} won` : ''}`} onClick={() => setOverlay({ kind: 'game', number: index + 1 })}>
-                <span className="round-node">{game?.coverage.picks ? <Check size={12} strokeWidth={2} /> : '–'}</span><span>Game {index + 1}</span>
-              </button>;
-            })}
-            <a className="round current-round" href="#draft-desk" aria-current="step"><span className="round-node"><Swords size={13} strokeWidth={1.7} /></span><span>Game {target}</span></a>
-          </div>
-        </section>
+        </div>
 
         <div className="data-controls" aria-label="Draft dataset">
-          <p className="data-source">{pack.source === 'grid' ? 'Local GRID data' : 'Fictional demo'} <span>· {replaySeries.length} best-of-five {replaySeries.length === 1 ? 'series' : 'series available'}</span></p>
+          {isGrid && <p className="data-source">{series.event} · {formatDate.format(new Date(series.startedAt))}</p>}
           <label className="data-field"><span id="series-field-label">Series</span><select aria-labelledby="series-field-label" value={series.id} onChange={event => selectDesk(chooseDesk(pack, replaySeries.find(item => item.id === event.target.value)))}>
             {replaySeries.map(item => <option key={item.id} value={item.id}>{teams[item.teamIds[0]]} vs {teams[item.teamIds[1]]}{pack.source === 'grid' ? ` · ${formatDate.format(new Date(item.startedAt))}` : ''}</option>)}
           </select></label>
@@ -211,77 +207,82 @@ function App() {
           {importError && <p className="import-error" role="alert">{importError} Your current draft stays open.</p>}
         </div>
 
-        <div className="desk-grid">
-          <section className="draft-panel" id="draft-desk" aria-labelledby="draft-heading">
+        <section className="broadcast-board" id="draft-desk" aria-label="Fearless Draft replay board">
+          <div className="scoreboard" role="group" aria-label={`Score entering Game ${target}`}>
+            <div className="score-team score-first"><span className="team-mark" aria-hidden="true">{teams[series.teamIds[0]][0]}</span><span>{teams[series.teamIds[0]]}</span><strong>{scoreComplete ? scores[0] : '—'}</strong></div>
+            <div className="score-center"><span>Best of five</span><strong>Game {target}</strong></div>
+            <div className="score-team score-second"><strong>{scoreComplete ? scores[1] : '—'}</strong><span>{teams[series.teamIds[1]]}</span><span className="team-mark" aria-hidden="true">{teams[series.teamIds[1]][0]}</span></div>
+          </div>
+          <nav className="rounds" aria-label="Recorded series drafts">
+            {[1, 2, 3, 4, 5].map(number => {
+              const game = series.games.find(entry => entry.number === number);
+              if (number === target) return <a key={number} className="round current-round" href="#change-pick" aria-current="step">Game {number}</a>;
+              return <button key={number} type="button" className="round" disabled={!game} aria-label={`View Game ${number} draft${game?.winnerId ? `, ${teams[game.winnerId]} won` : ''}`} onClick={() => setOverlay({ kind: 'game', number })}>Game {number}</button>;
+            })}
+          </nav>
+          <div className="desk-grid">
+          <section className="draft-panel" id="change-pick" aria-labelledby="draft-heading">
             <div className="panel-heading">
-              <div><span className="section-label">Game {target - 1} → Game {target}</span><h2 id="draft-heading">Draft comparison</h2></div>
-              <button className="subtle-button reset" type="button" onClick={() => editDesk({ replacement: '', backup: '' })} disabled={!replacement}><RotateCcw size={14} /> Reset</button>
-            </div>
-            <div className="draft-controls">
-              <div className="segmented checkpoint-control" role="group" aria-label="Target game">{checkpoints.map(number => <button key={number} type="button" aria-pressed={target === number} onClick={() => selectDesk({ ...chooseDesk(pack, series, own, number), disabled })}>Game {number}</button>)}</div>
-              <button className="subtle-button" type="button" disabled={!restrictions.length} onClick={() => setOverlay({ kind: 'restrictions' })}>Tournament restrictions{disabled.length > 0 ? ` (${disabled.length})` : ''}</button>
+              <div><span className="section-label">Game {target - 1} · {ownName}</span><h2 id="draft-heading">Change the pick</h2></div>
+              {checkpoint && <span className="lock-count"><b>{checkpoint.locks.size}</b> Game {target} lockouts</span>}
             </div>
             {checkpoint ? <>
               <div className="scenarios">
                 <div className="scenario recorded">
-                  <div className="scenario-header"><label htmlFor="recorded-pick">Recorded pick</label><LockKeyhole size={14} /></div>
-                  <div className="champion">
-                    {pick && <Crest name={champions[pick]} color={demoChampionStyle[pick]} />}
-                    <div className="pick-control"><div className="select-wrap"><select id="recorded-pick" value={pick} onChange={event => editDesk({ pick: event.target.value, replacement: '', backup: '' })}>
+                  <ChampionPortrait name={champions[pick]} />
+                  <div className="pick-control"><label htmlFor="recorded-pick">Recorded pick</label><div className="select-wrap"><select id="recorded-pick" value={pick} onChange={event => editDesk({ pick: event.target.value, replacement: '', backup: '' })}>
                       {eligiblePicks.map(action => <option value={action.championId} key={action.championId}>{champions[action.championId]}</option>)}
-                    </select><ChevronDown size={16} aria-hidden="true" /></div><small>{teams[own]} · Game {target - 1}</small></div>
-                  </div>
-                  <div className="scenario-foot"><span className="lock-dot" /> {checkpoint.locks.size} Game {target} lockouts</div>
+                  </select><ChevronDown size={16} aria-hidden="true" /></div></div>
                 </div>
-                <span className="swap-medallion" aria-hidden="true"><ArrowLeftRight size={16} /></span>
+                <ArrowRight className="swap-arrow" size={18} aria-hidden="true" />
                 <div className="scenario what-if">
-                  <div className="scenario-header"><label htmlFor="replacement">What-if pick</label><ArrowUpRight size={15} /></div>
-                  <div className="champion">
-                    <AnimatePresence initial={false} mode="popLayout">
-                      {(replacement || pick) && <motion.div key={replacement || pick} initial={{ opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.2 }}><Crest name={champions[replacement || pick]} color={demoChampionStyle[replacement || pick]} /></motion.div>}
-                    </AnimatePresence>
-                    <div className="pick-control">
-                      <div className="select-wrap"><select id="replacement" disabled={!options.length} value={replacement} onChange={event => editDesk({ replacement: event.target.value, backup: '' })}>
-                        <option value="">{champions[pick] ?? 'Choose a pick'}</option>
+                  <ChampionPortrait name={champions[replacement]} />
+                  <div className="pick-control"><label htmlFor="replacement">Replacement</label>
+                    <div className="select-wrap"><select ref={replacementInput} id="replacement" disabled={!options.length} value={replacement} onChange={event => editDesk({ replacement: event.target.value, backup: '' })}>
+                        <option value="">Choose a pick</option>
                         {options.map(id => <option key={id} value={id}>{champions[id]}</option>)}
-                      </select><ChevronDown size={16} aria-hidden="true" /></div>
-                      <small>{teams[own]} · Game {target - 1}</small>
-                    </div>
+                    </select><ChevronDown size={16} aria-hidden="true" /></div>
                   </div>
-                  <div className="scenario-foot"><span className="lock-dot" /> {swap?.locks.size ?? checkpoint.locks.size} Game {target} lockouts</div>
                 </div>
               </div>
-              <div className="impact-heading"><h3>What changes in Game {target}</h3><span>Fearless-unlocked before bans</span></div>
               <div className="impact" aria-live="polite">
-                <AnimatePresence initial={false} mode="wait">
-                  {swap ? <motion.div className="impact-row" key={`${pick}-${replacement}`} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.12 }}>
-                    <motion.div className="impact-cell reopened" initial={{ x: 15, opacity: 0.45 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: reducedMotion ? 0 : 0.26, ease: 'easeOut' }}><UnlockKeyhole size={17} /><div><strong>{champions[swap.reopened]}</strong><small>Reopens for both teams</small></div><ArrowDownLeft aria-hidden="true" size={16} className="impact-arrow" /></motion.div>
-                    <motion.div className="impact-cell newly-locked" initial={{ x: -15, opacity: 0.45 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: reducedMotion ? 0 : 0.26, ease: 'easeOut' }}><LockKeyhole size={17} /><div><strong>{champions[swap.locked]}</strong><small>Locks for both teams</small></div><ArrowDownRight aria-hidden="true" size={16} className="impact-arrow" /></motion.div>
-                  </motion.div> : <motion.p className="empty-impact" key="empty">{!checkpoint.previous.coverage.bans ? `Game ${target - 1} bans are incomplete. The swap is unavailable.` : !previousPatch ? 'The patch is unknown. The swap is unavailable.' : !options.length ? 'There are no verified alternatives from earlier drafts on this event and patch.' : `Choose a different Game ${target - 1} pick to see what opens up.`}</motion.p>}
-                </AnimatePresence>
+                {swap ? <m.div className="impact-row" key={`${pick}-${replacement}-${replay}`} initial={{ opacity: 0.45, y: reducedMotion ? 0 : 5 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reducedMotion ? 0 : 0.32 }}>
+                  <div className="impact-cell reopened"><UnlockKeyhole size={16} aria-hidden="true" /><span><strong>{champions[swap.reopened]} reopens</strong><small>For both teams</small></span></div>
+                  <div className="impact-cell newly-locked"><LockKeyhole size={16} aria-hidden="true" /><span><strong>{champions[swap.locked]} locks</strong><small>For both teams</small></span></div>
+                </m.div> : <p className="empty-impact">{!checkpoint.previous.coverage.bans ? `Game ${target - 1} bans are incomplete. The swap is unavailable.` : !previousPatch ? 'The patch is unknown. The swap is unavailable.' : !options.length ? 'There are no verified alternatives from earlier drafts on this event and patch.' : `Choose a replacement to see the Game ${target} impact.`}</p>}
+              </div>
+              <div className="replay-actions">
+                {swap && <><button className="outline-button" type="button" onClick={() => setReplay(value => value + 1)}><Play size={14} fill="currentColor" aria-hidden="true" /> Replay swap</button>
+                <button className="subtle-button" type="button" onClick={() => editDesk({ replacement: '', backup: '' })}><RotateCcw size={14} aria-hidden="true" /> Reset</button></>}
+                <span>Game {target} pool before standard bans</span>
               </div>
             </> : <p className="empty-impact" role="status">{status.kind === 'ended' ? `Game ${target} was not played. The series ended before this checkpoint.` : status.kind === 'missing' ? `Game ${status.game} picks are missing or incomplete. Game ${target} lockouts cannot be verified.` : 'This series cannot be replayed.'}</p>}
+            <div className="draft-controls">
+              <div className="segmented checkpoint-control" role="group" aria-label="Target game">{checkpoints.map(number => <button key={number} type="button" aria-pressed={target === number} onClick={() => selectDesk({ ...chooseDesk(pack, series, own, number), disabled })}>Game {number}</button>)}</div>
+              <button className="subtle-button" type="button" disabled={!restrictions.length} onClick={() => setOverlay({ kind: 'restrictions' })}>Tournament restrictions{disabled.length > 0 ? ` (${disabled.length})` : ''}</button>
+            </div>
           </section>
 
           <section className="scout-panel" id="scouting" aria-labelledby="scout-heading">
-            <div className="panel-heading scout-heading"><div><span className="section-label">Opponent scouting</span><h2 id="scout-heading">{teams[opponent]}</h2></div><span className="scout-symbol" aria-hidden="true"><Shield size={20} strokeWidth={1.3} /></span></div>
+            <div className="panel-heading scout-heading"><div><span className="section-label">{opponentName} scouting</span><h2 id="scout-heading">{cohort === 'Late series' ? 'Late-series picks and bans' : 'All-game picks and bans'}</h2></div></div>
             <div className="segmented" role="group" aria-label="Scouting sample">
               {(['Late series', 'All games'] as const).map(option => <button type="button" key={option} aria-pressed={cohort === option} onClick={() => { setCohort(option); setCopyStatus(''); }}>{option}</button>)}
             </div>
             <label className="patch-filter"><input type="checkbox" checked={Boolean(previousPatch) && samePatch} disabled={!previousPatch} onChange={event => { setSamePatch(event.target.checked); setCopyStatus(''); }} /> Same patch{previousPatch ? ` (${previousPatch})` : ''}</label>
             <div className="stats-heading"><span>{cohort === 'Late series' ? 'Games 3–5' : 'Games 1–5'}</span><span>Picks / eligible</span><span>Bans / eligible</span></div>
             {history.entries.length ? <ul className="stats-list">
-              {displayRanks.map(({ id, picks, bans }) => <motion.li layout={!reducedMotion} key={id} className={id === pick ? 'reserve-stat' : ''}>
+              {displayRanks.map(({ id, picks, bans }) => <li key={id} className={id === pick ? 'reserve-stat' : ''}>
                 <button type="button" aria-label={`${champions[id]}, ${picks.count} picks in ${picks.eligible} eligible drafts, ${bans.count} bans in ${bans.eligible} eligible drafts. View evidence`} onClick={() => setOverlay({ kind: 'evidence', champion: id })}>
-                  <Crest name={champions[id]} color={demoChampionStyle[id]} small /><span className="stats-name">{champions[id]}{Math.min(picks.eligible, bans.eligible) < 5 && <small>Sparse</small>}</span>
-                  <span className="stat-track" aria-hidden="true"><motion.span initial={false} animate={{ scaleX: picks.eligible ? picks.count / picks.eligible : 0 }} transition={{ duration: reducedMotion ? 0 : 0.28 }} /></span>
+                  <ChampionPortrait name={champions[id]} small /><span className="stats-name">{champions[id]}{Math.min(picks.eligible, bans.eligible) < 5 && <small>Sparse</small>}</span>
+                  <span className="stat-track" aria-hidden="true"><m.span initial={false} animate={{ scaleX: picks.eligible ? picks.count / picks.eligible : 0 }} transition={{ duration: reducedMotion ? 0 : 0.28 }} /></span>
                   <strong><EvidenceCount {...picks} /></strong><strong><EvidenceCount {...bans} /></strong><ChevronRight size={13} className="stat-chevron" />
                 </button>
-              </motion.li>)}
+              </li>)}
             </ul> : <p className="empty-impact">No covered earlier drafts match this scout filter.</p>}
             <p className="sample-note">{history.entries.length} covered {history.entries.length === 1 ? 'game' : 'games'}{dates.length > 0 && ` · ${formatDate.formatRange(new Date(Math.min(...dates)), new Date(Math.max(...dates)))}`}{history.excluded > 0 && ` · ${history.excluded} excluded for coverage`}. Eligibility excludes prior Fearless lockouts.</p>
           </section>
-        </div>
+          </div>
+        </section>
 
         <section className="prep" aria-labelledby="prep-heading">
           <div><span className="section-label">Game {target} prep note</span><h2 id="prep-heading">{prepTitle}</h2><p>{prepDetail}</p></div>
@@ -292,7 +293,10 @@ function App() {
             <button className="outline-button" type="button" onClick={copyPrepNote} disabled={!checkpoint}>{copyStatus === 'Prep note copied' ? <Check size={16} /> : <Copy size={15} />} Copy prep note</button><span role="status">{copyStatus}</span>
           </div>
         </section>
-        <footer>Draft Reserve · {pack.source === 'grid' ? 'Local GRID match data' : 'Fictional match data'}</footer>
+        <footer>
+          <p>Champion images from <a href="https://developer.riotgames.com/docs/lol#data-dragon">Riot Data Dragon</a>. Match data provided by GRID when a local export is loaded.</p>
+          <p>Draft Reserve is not endorsed by Riot Games and does not reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+        </footer>
       </main>
 
       {overlay?.kind === 'briefing' && <Dialog title="Game 5 briefing" close={() => setOverlay(null)}>
@@ -304,6 +308,7 @@ function App() {
         {details.actions.length > 0 && <ol className="game-actions" aria-label="Recorded draft order">
           {details.actions.map((action, index) => <li key={`${action.championId}-${index}`}>
             <span className="draft-order" aria-hidden="true">{index + 1}</span>
+            <ChampionPortrait name={champions[action.championId]} small />
             <span><strong>{champions[action.championId]}</strong><small>{teams[action.teamId]}</small></span>
             <span>{action.kind === 'pick' ? 'Pick' : 'Ban'}</span>
           </li>)}
@@ -322,4 +327,6 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <LazyMotion features={domAnimation} strict><App /></LazyMotion>
+);

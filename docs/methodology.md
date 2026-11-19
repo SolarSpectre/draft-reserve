@@ -14,6 +14,6 @@ GRID is the source for real pick, ban, and match data. The workspace calls the c
 
 ## Data delivery
 
-The public build uses fictional data and original visuals. Judges can reproduce the real replay by importing a draft pack made from their authorized local GRID checkout. The app reads the pack in browser memory. The pack is a local derived file covered by the starter license.
+The public demo uses fictional match results and official Riot Data Dragon champion portraits. Judges can reproduce the real replay by importing a draft pack made from their authorized local GRID checkout. The app reads the pack in browser memory. The pack is a local derived file covered by the starter license. Portraits are fetched from Riot's CDN by champion filename.
 
 [Riot's Full Fearless explanation](https://lolesports.com/en-US/news/lol-esports-in-2025) · [GRID starter](https://github.com/cloud9esports/stl-hackathon-2026-grid-starter)
