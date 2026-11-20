@@ -6,9 +6,11 @@ Draft Reserve compares entry into Games 3, 4, and 5 in a documented best-of-five
 
 In a what-if scenario, change one of your team's picks in the immediately preceding game. The comparison holds the other recorded picks and bans fixed. It shows the champions entering and leaving the shared Fearless-unlocked set before standard bans. It does not forecast draft order, opponent reactions, or match outcomes.
 
+The prep plan can keep the recorded pick or use the replacement. The replacement plan requires distinct primary and backup champions from the verified pool before standard bans. The original pick can re-enter that pool when the swap releases it. The copied plan includes the matchup, the selected game, the pick decision, and the opponent’s scouting counts for the selected sample.
+
 ## Opponent evidence
 
-Use up to 20 verified drafts from strictly earlier series. A draft contributes only when the earlier numbered games provide a complete verified pick history. For each champion, exclude games where an earlier Fearless pick locked that champion out. Show picks or standard bans over the eligible drafts that record that action type. Report the sample window and expose the source games. The late-series view covers Games 3–5. Counts from fewer than five eligible drafts are sparse.
+Use up to 20 verified drafts from strictly earlier series after applying the game and patch filters. A draft contributes only when the earlier numbered games provide a complete verified pick history. For each champion, exclude games where an earlier Fearless pick locked that champion out. Show picks or standard bans over the eligible drafts that record that action type. A dash means there were no eligible drafts for that action type. The late-series view pools Games 3–5 and shows how many games contributed at each checkpoint. The target-game view uses only the selected game number. Counts from fewer than five eligible drafts are sparse. The evidence list includes Fearless-locked games and opens each source draft in its recorded order.
 
 GRID is the source for real pick, ban, and match data. The workspace calls the computed state **Fearless-unlocked**. Use **Tournament restrictions** to exclude champions disabled for the selected series.
 

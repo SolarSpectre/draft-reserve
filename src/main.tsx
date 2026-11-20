@@ -2,18 +2,23 @@ import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type Re
 import { createRoot } from 'react-dom/client';
 import { gsap } from 'gsap';
 import { domAnimation, LazyMotion, m, MotionConfig, useReducedMotion } from 'motion/react';
-import { ArrowDown, ArrowLeftRight, ArrowUpRight, Check, ChevronDown, Clapperboard, Copy, FileUp, ListFilter, LockKeyhole, Play, RotateCcw, UnlockKeyhole, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowLeftRight, ArrowUpRight, Check, ChevronDown, Clapperboard, Copy, FileUp, ListFilter, LockKeyhole, Play, RotateCcw, UnlockKeyhole, X } from 'lucide-react';
 import '@fontsource/barlow/latin-400.css';
 import '@fontsource/barlow/latin-500.css';
 import '@fontsource/barlow/latin-600.css';
 import '@fontsource/barlow/latin-700.css';
-import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getReplaySeries, getSwapOptions, isCloud9, parsePack, type Checkpoint, type Cohort, type DraftPack, type DraftSeries } from './draft';
+import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getPlanOptions, getReplaySeries, getSwapOptions, isCloud9, parsePack, type Checkpoint, type DraftGame, type DraftPack, type DraftSeries } from './draft';
 import { demoPack, demoSeriesId } from './demo';
 import { championImage } from './champion-art';
 import './styles.css';
 
-type Overlay = { kind: 'briefing' } | { kind: 'game'; number: number } | { kind: 'evidence'; champion: string } | { kind: 'restrictions' };
-type Desk = { pack: DraftPack; series: DraftSeries; own: string; target: Checkpoint; pick: string; replacement: string; backup: string; disabled: string[] };
+type EvidenceOverlay = { kind: 'evidence'; champion: string };
+type Overlay = { kind: 'briefing' } | { kind: 'game'; series: DraftSeries; game: DraftGame; from?: EvidenceOverlay } | EvidenceOverlay | { kind: 'restrictions' };
+type ScoutView = 'Target game' | 'Late series' | 'All games';
+type Desk = {
+  pack: DraftPack; series: DraftSeries; own: string; target: Checkpoint; disabled: string[];
+  pick: string; replacement: string; plan: 'recorded' | 'swap'; primary: string; backup: string;
+};
 const staticMedia = `${import.meta.env.BASE_URL}media/`;
 const momentLoader = `${import.meta.env.BASE_URL}assets/moments/moments.js`;
 const featuredChampions = new Set(['Azir', 'Orianna', 'Taliyah', 'Syndra']);
@@ -27,8 +32,12 @@ function chooseDesk(pack: DraftPack, series?: DraftSeries, own?: string, target?
   const at = target ?? [...checkpoints].reverse().find(number => getCheckpoint(active, number).kind === 'ready') ?? 3;
   const game = active.games.find(entry => entry.number === at - 1);
   const firstPick = game?.actions.find(action => action.kind === 'pick' && action.teamId === team)?.championId ?? '';
-  const narrative = active.id === demoSeriesId && team === 'northstar' && at === 5;
-  return { pack, series: active, own: team, target: at, pick: narrative ? 'morrow' : firstPick, replacement: narrative ? 'vesper' : '', backup: '', disabled: [] };
+  const narrative = pack.source === 'demo' && active.id === demoSeriesId && team === 'northstar' && at === 5 && target === undefined;
+  return {
+    pack, series: active, own: team, target: at, disabled: [],
+    pick: narrative ? 'morrow' : firstPick, replacement: narrative ? 'vesper' : '',
+    plan: narrative ? 'swap' : 'recorded', primary: narrative ? 'morrow' : '', backup: narrative ? 'ilex' : '',
+  };
 }
 
 function ChampionPortrait({ name, small = false }: { name?: string; small?: boolean }) {
@@ -63,7 +72,7 @@ function ReplayTitle({ game, reducedMotion }: { game: Checkpoint; reducedMotion:
   return <h1 id="replay-title" ref={title}><span className="title-word">Game {game}</span>{' '}<span className="title-word">draft replay</span></h1>;
 }
 
-function PoolImpact({ reopened, locked, reducedMotion }: { reopened: string; locked: string; reducedMotion: boolean | null }) {
+function PoolImpact({ reopened, locked, restricted, reducedMotion }: { reopened: string; locked: string; restricted: boolean; reducedMotion: boolean | null }) {
   const row = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -80,7 +89,7 @@ function PoolImpact({ reopened, locked, reducedMotion }: { reopened: string; loc
     <div className="impact-cell reopened">
       <span className="impact-wash" aria-hidden="true" />
       <span className="impact-icon"><UnlockKeyhole size={17} aria-hidden="true" /></span>
-      <span><strong>{reopened} reopens</strong><small>Available to both teams</small></span>
+      <span><strong>{reopened} {restricted ? 'clears lockout' : 'reopens'}</strong><small>{restricted ? 'Restricted for this series' : 'Available to both teams'}</small></span>
     </div>
     <div className="impact-cell newly-locked">
       <span className="impact-wash" aria-hidden="true" />
@@ -90,16 +99,27 @@ function PoolImpact({ reopened, locked, reducedMotion }: { reopened: string; loc
   </div>;
 }
 
-function Dialog({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
+function Dialog({ title, close, back, children }: { title: string; close: () => void; back?: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => { ref.current?.showModal(); }, []);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (dialog.open) {
+      dialog.scrollTop = 0;
+      heading.current?.focus();
+    } else {
+      dialog.showModal();
+    }
+  }, [title]);
   return (
     <dialog ref={ref} className="dialog" aria-labelledby="dialog-title" onClose={close} onClick={event => {
       if (event.target === event.currentTarget) event.currentTarget.close();
     }}>
       <div className="dialog-content">
+        {back && <button type="button" className="subtle-button dialog-back" onClick={back}><ArrowLeft size={16} aria-hidden="true" /> Back to evidence</button>}
         <div className="dialog-heading">
-          <h2 id="dialog-title">{title}</h2>
+          <h2 id="dialog-title" ref={heading} tabIndex={-1}>{title}</h2>
           <button type="button" className="icon-button" aria-label="Close dialog" onClick={() => ref.current?.close()}><X size={20} /></button>
         </div>
         {children}
@@ -109,12 +129,19 @@ function Dialog({ title, close, children }: { title: string; close: () => void; 
 }
 
 function EvidenceCount({ count, eligible }: { count: number; eligible: number }) {
-  return eligible ? <>{count}<span>/{eligible}</span></> : <span aria-label="No covered drafts">—</span>;
+  return eligible ? <>{count}<span>/{eligible}</span></> : <span title="No eligible drafts">—</span>;
+}
+
+function scoutingCounts({ picks, bans }: ReturnType<typeof evidenceFor>) {
+  return [
+    picks.eligible ? `Picked in ${picks.count} of ${picks.eligible} eligible drafts.` : 'No eligible pick sample.',
+    bans.eligible ? `Banned in ${bans.count} of ${bans.eligible} eligible drafts.` : 'No eligible ban sample.',
+  ].join(' ');
 }
 
 function App() {
   const [desk, setDesk] = useState(() => chooseDesk(demoPack));
-  const [cohort, setCohort] = useState<Cohort>('Late series');
+  const [scoutView, setScoutView] = useState<ScoutView>('Late series');
   const [samePatch, setSamePatch] = useState(false);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [importError, setImportError] = useState('');
@@ -146,40 +173,59 @@ function App() {
   const scores = series.teamIds.map(id => series.games.filter(game => game.number < target && game.winnerId === id).length);
   const scoreComplete = scores[0] + scores[1] === target - 1;
   const observedPool = checkpoint ? getObservedPool(pack, series, checkpoint.previous) : [];
-  const restrictions = observedPool.filter(id => !checkpoint?.locks.has(id));
   const excluded = new Set(disabled);
   const options = checkpoint ? getSwapOptions(checkpoint, observedPool, excluded) : [];
   const swap = checkpoint && replacement ? compareSwap(checkpoint, pick, replacement, options) : null;
-  const backupOptions = swap ? getBackupOptions(swap, observedPool, excluded) : [];
-  const demoBackup = ['ilex', 'calder'].find(id => pack.source === 'demo' && backupOptions.includes(id));
-  const backup = backupOptions.includes(desk.backup) ? desk.backup : demoBackup ?? '';
+  const restrictions = [...new Set([...observedPool.filter(id => !checkpoint?.locks.has(id)), ...(swap ? [swap.reopened] : []), ...disabled])];
+  const primaryOptions = swap ? getPlanOptions(swap, observedPool, excluded) : [];
+  const primary = primaryOptions.includes(desk.primary) ? desk.primary : '';
+  const backupOptions = swap && primary ? getBackupOptions(swap, observedPool, excluded, primary) : [];
+  const backup = backupOptions.includes(desk.backup) ? desk.backup : '';
+  const useSwap = Boolean(swap) && desk.plan === 'swap';
+  const reopenedRestricted = excluded.has(pick);
   const eligiblePicks = checkpoint?.previous.actions.filter(action => action.kind === 'pick' && action.teamId === own) ?? [];
-  const history = getHistory(pack, series, opponent, cohort, samePatch ? previousPatch : undefined);
+  const scope = scoutView === 'Target game' ? `Game ${target}` : scoutView === 'Late series' ? 'Games 3–5' : 'Games 1–5';
+  const patchFilter = samePatch ? previousPatch : undefined;
+  const sampleLabel = `${scope}${patchFilter ? ` · Patch ${patchFilter}` : ''}`;
+  const history = getHistory(pack, series, opponent, scoutView === 'Target game' ? target : scoutView, patchFilter);
   const dates = history.entries.map(({ series: entry }) => Date.parse(entry.startedAt));
   const reserveEvidence = evidenceFor(history.entries, opponent, pick);
   const observed = new Set(history.entries.flatMap(({ game }) => game.actions.filter(action => action.teamId === opponent).map(action => action.championId)));
   const ranked = [...observed].map(id => ({ id, ...evidenceFor(history.entries, opponent, id) })).filter(row => row.picks.count + row.bans.count > 0)
     .sort((a, b) => (b.picks.count / (b.picks.eligible || 1) - a.picks.count / (a.picks.eligible || 1)) || (b.bans.count - a.bans.count) || champions[a.id].localeCompare(champions[b.id]));
-  const visibleIds = [...new Set([pick, replacement, ...ranked.map(row => row.id)].filter(Boolean))].slice(0, 4);
+  const visibleIds = [...new Set([pick, replacement, ...(useSwap ? [primary, backup] : []), ...ranked.map(row => row.id)].filter(Boolean))].slice(0, 4);
   const displayRanks = visibleIds.map(id => ({ id, ...evidenceFor(history.entries, opponent, id) }));
-  const details = overlay?.kind === 'game' ? series.games.find(game => game.number === overlay.number) : undefined;
-  const reserveSample = reserveEvidence.picks.eligible
-    ? `${teams[opponent]} picked ${champions[pick]} in ${reserveEvidence.picks.count} of ${reserveEvidence.picks.eligible} covered eligible drafts${reserveEvidence.picks.eligible < 5 ? ' (sparse sample)' : ''}.`
-    : `${teams[opponent]} has no verified eligible pick sample for ${champions[pick]}.`;
-  const prepDetail = swap
-    ? `Use ${champions[replacement]} in Game ${target - 1}. ${reserveSample} ${backup ? `If they take ${champions[pick]}, keep ${champions[backup]} as your backup.` : 'Choose a backup from the unlocked pool.'}`
-    : pick && checkpoint ? `${champions[pick]} stays locked for both teams in the recorded draft.` : 'Select a checkpoint with enough draft coverage to make a prep note.';
-  const prepTitle = swap ? `Save ${champions[pick]} for Game ${target}.` : 'Start from the recorded draft.';
-  const prepNote = `${prepTitle} ${prepDetail}`;
+  const evidenceView = overlay?.kind === 'evidence' ? overlay : null;
+  const evidence = evidenceView ? evidenceFor(history.entries, opponent, evidenceView.champion) : null;
+  const draft = overlay?.kind === 'game' ? overlay : null;
+  const fromEvidence = draft?.from;
+  const reopenedImpact = reopenedRestricted ? `${champions[pick]} remains restricted` : `${champions[pick]} reopens to both teams`;
+  const prepContext = `${ownName} vs ${opponentName} · Game ${target}${isGrid ? ` · ${formatDate.format(new Date(series.startedAt))}` : ' · Fictional series'}`;
+  const pickChange = useSwap
+    ? `Play ${champions[replacement]} instead of ${champions[pick]} in Game ${target - 1}. ${reopenedImpact}. ${champions[replacement]} locks.`
+    : `Keep ${champions[pick]} in Game ${target - 1}. It stays locked for both teams.`;
+  const prepBranches = useSwap && primary && backup
+    ? `Take ${champions[primary]} if available. If ${opponentName} picks or bans ${champions[primary]}, use ${champions[backup]} if available.`
+    : '';
+  const prepEvidence = `${opponentName} scouting for ${champions[pick]} (${sampleLabel}). ${scoutingCounts(reserveEvidence)}`;
+  const primaryEvidence = useSwap && primary && primary !== pick
+    ? `${opponentName} scouting for ${champions[primary]} (${sampleLabel}). ${scoutingCounts(evidenceFor(history.entries, opponent, primary))}`
+    : '';
+  const prepNote = [prepContext, pickChange, prepBranches, prepEvidence, primaryEvidence].filter(Boolean).join('\n');
+  const canCopy = Boolean(checkpoint && pick && (!useSwap || prepBranches));
 
   function selectDesk(next: Desk) {
     setDesk(next);
     setCopyStatus('');
   }
 
-  function editDesk(changes: Partial<Pick<Desk, 'pick' | 'replacement' | 'backup' | 'disabled'>>) {
+  function editDesk(changes: Partial<Pick<Desk, 'pick' | 'replacement' | 'plan' | 'primary' | 'backup' | 'disabled'>>) {
     setDesk(current => ({ ...current, ...changes }));
     setCopyStatus('');
+  }
+
+  function selectReplacement(id: string) {
+    editDesk({ replacement: id, plan: id ? 'swap' : 'recorded', primary: id ? pick : '', backup: '' });
   }
 
   async function loadFile(event: ChangeEvent<HTMLInputElement>) {
@@ -192,7 +238,7 @@ function App() {
       const imported = parsePack(JSON.parse(await file.text()));
       if (attempt !== importSequence.current) return;
       selectDesk(chooseDesk(imported));
-      setCohort('Late series');
+      setScoutView('Late series');
       setSamePatch(false);
     } catch (error) {
       if (attempt !== importSequence.current) return;
@@ -207,16 +253,22 @@ function App() {
   function useDemo() {
     importSequence.current++;
     selectDesk(chooseDesk(demoPack));
-    setCohort('Late series');
+    setScoutView('Late series');
     setSamePatch(false);
     setImportError('');
   }
 
   function toggleRestriction(id: string) {
-    const removed = disabled.includes(id);
-    editDesk({ disabled: removed ? disabled.filter(item => item !== id) : [...disabled, id],
-      replacement: !removed && replacement === id ? '' : replacement,
-      backup: !removed && desk.backup === id ? '' : desk.backup });
+    if (excluded.has(id)) {
+      editDesk({ disabled: disabled.filter(item => item !== id) });
+      return;
+    }
+    const nextDisabled = [...disabled, id];
+    if (replacement === id) {
+      editDesk({ disabled: nextDisabled, replacement: '', plan: 'recorded', primary: '', backup: '' });
+    } else {
+      editDesk({ disabled: nextDisabled, primary: desk.primary === id ? '' : desk.primary, backup: desk.backup === id ? '' : desk.backup });
+    }
   }
 
   async function copyPrepNote() {
@@ -224,7 +276,7 @@ function App() {
       await navigator.clipboard.writeText(prepNote);
       setCopyStatus('Prep note copied');
     } catch {
-      setCopyStatus('Select the prep note text to copy it.');
+      setCopyStatus('Select the full note below to copy it.');
     }
   }
 
@@ -244,7 +296,7 @@ function App() {
           <nav aria-label="Workspace">
             <a className="nav-current" href="#draft-desk">Replay</a>
             <a href="#scouting">Scouting</a>
-            <a href="#prep">Prep note</a>
+            {checkpoint && <a href="#prep">Prep note</a>}
           </nav>
           <div className="masthead-actions">
             <input ref={fileInput} type="file" accept=".json,application/json" hidden aria-label="Draft export JSON" onChange={loadFile} />
@@ -271,7 +323,7 @@ function App() {
             <label className="data-field"><span>Series</span><select value={series.id} onChange={event => selectDesk(chooseDesk(pack, replaySeries.find(item => item.id === event.target.value)))}>
               {replaySeries.map(item => <option key={item.id} value={item.id}>{teams[item.teamIds[0]]} vs {teams[item.teamIds[1]]}{isGrid ? ` · ${formatDate.format(new Date(item.startedAt))}` : ''}</option>)}
             </select></label>
-            <label className="data-field"><span>Our team</span><select value={own} onChange={event => selectDesk(chooseDesk(pack, series, event.target.value, target))}>{series.teamIds.map(id => <option key={id} value={id}>{teams[id]}</option>)}</select></label>
+            <label className="data-field"><span>Our team</span><select value={own} onChange={event => selectDesk({ ...chooseDesk(pack, series, event.target.value, target), disabled })}>{series.teamIds.map(id => <option key={id} value={id}>{teams[id]}</option>)}</select></label>
             <label className="data-field"><span>Checkpoint</span><select value={target} onChange={event => selectDesk({ ...chooseDesk(pack, series, own, Number(event.target.value) as Checkpoint), disabled })}>
               {checkpoints.map(number => <option key={number} value={number}>Game {number}</option>)}
             </select></label>
@@ -292,7 +344,7 @@ function App() {
                     <div className="pick-control">
                       <label htmlFor="recorded-pick">Recorded pick</label>
                       <div className="select-wrap">
-                        <select id="recorded-pick" value={pick} onChange={event => editDesk({ pick: event.target.value, replacement: '', backup: '' })}>
+                        <select id="recorded-pick" value={pick} onChange={event => editDesk({ pick: event.target.value, replacement: '', plan: 'recorded', primary: '', backup: '' })}>
                           {eligiblePicks.map(action => <option value={action.championId} key={action.championId}>{champions[action.championId]}</option>)}
                         </select><ChevronDown size={17} aria-hidden="true" />
                       </div>
@@ -304,7 +356,7 @@ function App() {
                     <div className="pick-control">
                       <label htmlFor="replacement">Replacement</label>
                       <div className="select-wrap">
-                        <select ref={replacementInput} id="replacement" disabled={!options.length} value={replacement} onChange={event => editDesk({ replacement: event.target.value, backup: '' })}>
+                        <select ref={replacementInput} id="replacement" disabled={!options.length} value={replacement} onChange={event => selectReplacement(event.target.value)}>
                           <option value="">Choose a pick</option>
                           {options.map(id => <option key={id} value={id}>{champions[id]}</option>)}
                         </select><ChevronDown size={17} aria-hidden="true" />
@@ -314,15 +366,51 @@ function App() {
                 </div>
                 <div className="replay-actions" role="group" aria-label="Swap controls">
                   <button className="outline-button" type="button" disabled={!swap} onClick={() => setReplay(value => value + 1)}><Play size={15} aria-hidden="true" /> Replay swap</button>
-                  <button className="subtle-button" type="button" disabled={!replacement} onClick={() => editDesk({ replacement: '', backup: '' })}><RotateCcw size={15} aria-hidden="true" /> Reset swap</button>
+                  <button className="subtle-button" type="button" disabled={!replacement} onClick={() => selectReplacement('')}><RotateCcw size={15} aria-hidden="true" /> Reset swap</button>
                 </div>
                 <div className="impact-heading">
                   <h3 className="section-label">Game {target} pool impact</h3><span>Before standard bans</span>
                 </div>
                 <div className="impact" aria-live="polite">
-                  {swap ? <PoolImpact key={`${pick}-${replacement}-${replay}`} reopened={champions[swap.reopened]} locked={champions[swap.locked]} reducedMotion={reducedMotion} /> : <p className="empty-impact">{!checkpoint.previous.coverage.bans ? `Game ${target - 1} bans are incomplete. The swap is unavailable.` : !previousPatch ? 'The patch is unknown. The swap is unavailable.' : !options.length ? 'There are no verified alternatives from earlier drafts on this event and patch.' : `Choose a replacement to see the Game ${target} impact.`}</p>}
+                  {swap ? <PoolImpact key={`${pick}-${replacement}-${replay}`} reopened={champions[swap.reopened]} locked={champions[swap.locked]} restricted={reopenedRestricted} reducedMotion={reducedMotion} /> : <p className="empty-impact">{!checkpoint.previous.coverage.bans ? `Game ${target - 1} bans are incomplete. The swap is unavailable.` : !previousPatch ? 'The patch is unknown. The swap is unavailable.' : !options.length ? 'There are no verified alternatives from earlier drafts on this event and patch.' : `Choose a replacement to see the Game ${target} impact.`}</p>}
                 </div>
               </> : <p className="empty-impact" role="status">{status.kind === 'ended' ? `Game ${target} was not played. The series ended before this checkpoint.` : status.kind === 'missing' ? `Game ${status.game} picks are missing or incomplete. Game ${target} lockouts cannot be verified.` : 'This series cannot be replayed.'}</p>}
+              {checkpoint && <section className="prep" id="prep" aria-labelledby="prep-heading">
+                <h3 id="prep-heading">Game {target} prep plan</h3>
+                {swap && <fieldset className="plan-choices" aria-label="Plan to copy">
+                  <label>
+                    <input type="radio" name="prep-plan" checked={!useSwap} onChange={() => editDesk({ plan: 'recorded' })} />
+                    <span><strong>Keep {champions[pick]}</strong><small>{champions[pick]} stays locked</small></span>
+                  </label>
+                  <label>
+                    <input type="radio" name="prep-plan" checked={useSwap} onChange={() => editDesk({ plan: 'swap' })} />
+                    <span><strong>Use {champions[replacement]}</strong><small>{reopenedImpact}</small></span>
+                  </label>
+                </fieldset>}
+                {useSwap && <div className="plan-picks">
+                  <label className="data-field"><span>Primary pick</span><select value={primary} onChange={event => {
+                    const next = event.target.value;
+                    editDesk({ primary: next, backup: desk.backup === next ? '' : desk.backup });
+                  }}>
+                    <option value="">Choose a champion</option>{primaryOptions.map(id => <option key={id} value={id}>{champions[id]}</option>)}
+                  </select></label>
+                  <label className="data-field"><span>Backup</span><select value={backup} disabled={!backupOptions.length} onChange={event => editDesk({ backup: event.target.value })}>
+                    <option value="">Choose a champion</option>{backupOptions.map(id => <option key={id} value={id}>{champions[id]}</option>)}
+                  </select></label>
+                </div>}
+                <div className="prep-copy">
+                  <p className="prep-matchup">{prepContext}</p>
+                  <p>{pickChange}</p>
+                  {useSwap && <p>{prepBranches || (primary && !backupOptions.length ? 'No verified backup is available for this pick.' : 'Choose a primary and backup to finish the plan.')}</p>}
+                  <p>{prepEvidence}</p>
+                  {primaryEvidence && <p>{primaryEvidence}</p>}
+                </div>
+                <div className="prep-actions">
+                  <button className="primary-button" type="button" onClick={copyPrepNote} disabled={!canCopy}>{copyStatus === 'Prep note copied' ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />} Copy prep note</button>
+                  <span className="copy-status" role="status">{copyStatus}</span>
+                </div>
+                {copyStatus && copyStatus !== 'Prep note copied' && <textarea className="note-fallback" aria-label="Full prep note" readOnly value={prepNote} onFocus={event => event.currentTarget.select()} />}
+              </section>}
               <div className="series-rail">
                 <h3 className="rail-label">Series timeline</h3>
                 <div className="rounds" role="group" aria-label="Recorded series drafts">
@@ -331,7 +419,7 @@ function App() {
                     const game = series.games.find(entry => entry.number === number);
                     const label = <><span className="round-number" aria-hidden="true">Game {number}</span><span className="round-state">{number === target ? 'Target' : game?.winnerId ? teams[game.winnerId] : game ? 'Draft recorded' : 'No draft'}</span></>;
                     if (number === target) return <a key={number} className="round current-round" href="#change-pick" aria-current="step" aria-label={`Game ${number} checkpoint`}>{label}</a>;
-                    return <button key={number} type="button" className="round" disabled={!game} aria-label={`View Game ${number} draft${game?.winnerId ? `, ${teams[game.winnerId]} won` : ''}`} onClick={() => setOverlay({ kind: 'game', number })}>{label}</button>;
+                    return <button key={number} type="button" className="round" disabled={!game} aria-label={`View Game ${number} draft${game?.winnerId ? `, ${teams[game.winnerId]} won` : ''}`} onClick={() => game && setOverlay({ kind: 'game', series, game })}>{label}</button>;
                   })}
                 </div>
               </div>
@@ -371,14 +459,14 @@ function App() {
                 </div>
                 <div className="scout-filters">
                   <div className="segmented" role="group" aria-label="Scouting sample">
-                    {(['Late series', 'All games'] as const).map(option => <button type="button" key={option} aria-pressed={cohort === option} onClick={() => { setCohort(option); setCopyStatus(''); }}>{option}</button>)}
+                    {(['Late series', 'Target game', 'All games'] as const).map(option => <button type="button" key={option} aria-pressed={scoutView === option} onClick={() => { setScoutView(option); setCopyStatus(''); }}>{option === 'Target game' ? `Game ${target}` : option}</button>)}
                   </div>
                   <label className="patch-filter" title={previousPatch ? `Patch ${previousPatch}` : undefined}><input type="checkbox" checked={Boolean(previousPatch) && samePatch} disabled={!previousPatch} onChange={event => { setSamePatch(event.target.checked); setCopyStatus(''); }} /> Same patch</label>
                 </div>
-                <div className="stats-heading section-label"><span>{cohort === 'Late series' ? 'Games 3–5' : 'Games 1–5'}</span><span>Picked</span><span>Banned</span></div>
+                <div className="stats-heading section-label"><span>{scope}</span><span>Picked</span><span>Banned</span></div>
                 {history.entries.length ? <ul className="stats-list">
                   {displayRanks.map(({ id, picks, bans }) => <li key={id} className={id === pick ? 'reserve-stat' : ''}>
-                    <button type="button" aria-label={`${champions[id]}, ${picks.count} picks in ${picks.eligible} eligible drafts, ${bans.count} bans in ${bans.eligible} eligible drafts. View evidence`} onClick={() => setOverlay({ kind: 'evidence', champion: id })}>
+                    <button type="button" aria-label={`${champions[id]}, ${picks.eligible ? `${picks.count} picks in ${picks.eligible} eligible drafts` : 'no eligible pick drafts'}, ${bans.eligible ? `${bans.count} bans in ${bans.eligible} eligible drafts` : 'no eligible ban drafts'}. View evidence`} onClick={() => setOverlay({ kind: 'evidence', champion: id })}>
                       <ChampionPortrait name={champions[id]} small />
                       <span className="stats-name">{champions[id]}{Math.min(picks.eligible, bans.eligible) < 5 && <small>Sparse</small>}
                         <span className="stat-track" aria-hidden="true"><m.span initial={false} animate={{ scaleX: picks.eligible ? picks.count / picks.eligible : 0 }} transition={{ duration: reducedMotion ? 0 : 0.28 }} /></span>
@@ -386,23 +474,14 @@ function App() {
                       <strong><EvidenceCount {...picks} /></strong><strong><EvidenceCount {...bans} /></strong><ArrowUpRight size={15} className="stat-chevron" aria-hidden="true" />
                     </button>
                   </li>)}
-                </ul> : <p className="empty-impact">No covered earlier drafts match this scout filter.</p>}
-                <p className="sample-note">{history.entries.length} covered {history.entries.length === 1 ? 'game' : 'games'}{dates.length > 0 && ` · ${formatDate.formatRange(new Date(Math.min(...dates)), new Date(Math.max(...dates)))}`}{history.excluded > 0 && ` · ${history.excluded} excluded for coverage`}. Counts are out of eligible drafts.</p>
+                </ul> : <p className="empty-impact">{scoutView === 'Target game' ? `No covered earlier Game ${target} drafts${patchFilter ? ' on this patch' : ''}.` : 'No covered earlier drafts match this filter.'}</p>}
+                <p className="sample-note">{history.entries.length} covered {history.entries.length === 1 ? 'game' : 'games'}{dates.length > 0 && ` · ${formatDate.formatRange(new Date(Math.min(...dates)), new Date(Math.max(...dates)))}`}{history.excluded > 0 && ` · ${history.excluded} excluded for coverage`}. A dash means no eligible drafts.</p>
+                {scoutView === 'Late series' && history.entries.length > 0 && <p className="sample-breakdown">{checkpoints.map(number => `Game ${number} (${history.entries.filter(({ game }) => game.number === number).length})`).join(' · ')}</p>}
               </section>
             </aside>
           </div>
         </section>
 
-        <section className="prep" id="prep" aria-labelledby="prep-heading">
-          <div className="prep-copy"><p className="section-label">Game {target} prep note</p><h2 id="prep-heading">{prepTitle}</h2><p>{prepDetail}</p></div>
-          <div className="prep-actions">
-            {swap && backupOptions.length > 0 && <label className="data-field"><span>Backup</span><select value={backup} onChange={event => editDesk({ backup: event.target.value })}>
-              {!demoBackup && <option value="">Choose a champion</option>}{backupOptions.map(id => <option key={id} value={id}>{champions[id]}</option>)}
-            </select></label>}
-            <button className="primary-button" type="button" onClick={copyPrepNote} disabled={!checkpoint}>{copyStatus === 'Prep note copied' ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />} Copy prep note</button>
-            <span className="copy-status" role="status">{copyStatus}</span>
-          </div>
-        </section>
       </main>
       <footer className="wrap">
         <p>Champion images from <a href="https://developer.riotgames.com/docs/lol#data-dragon">Riot Data Dragon</a>. Match data provided by GRID when a local export is loaded.</p>
@@ -415,21 +494,33 @@ function App() {
         </video>
         <p className="dialog-note">Champions picked earlier in a Fearless series lock for both teams. Replace one Game 4 pick to see who returns to the Game 5 pool.</p>
       </Dialog>}
-      {details && <Dialog title={`Game ${details.number} draft`} close={() => setOverlay(null)}>
-        <p className="dialog-note">{details.winnerId ? `${teams[details.winnerId]} won.` : 'The winner is unknown.'} {details.coverage.picks ? 'Both teams carry these picks forward as lockouts.' : 'The feed has incomplete picks.'}</p>
-        {details.actions.length > 0 && <ol className="game-actions" aria-label="Recorded draft order">
-          {details.actions.map((action, index) => <li key={`${action.championId}-${index}`}>
-            <span className="draft-order" aria-hidden="true">{index + 1}</span>
-            <ChampionPortrait name={champions[action.championId]} small />
-            <span><strong>{champions[action.championId]}</strong><small>{teams[action.teamId]}</small></span>
-            <span>{action.kind === 'pick' ? 'Pick' : 'Ban'}</span>
-          </li>)}
-        </ol>}
-      </Dialog>}
-      {overlay?.kind === 'evidence' && <Dialog title={`${champions[overlay.champion]} scouting evidence`} close={() => setOverlay(null)}>
-        <p className="dialog-note">{teams[opponent]} · {cohort} · Earlier covered drafts</p>
-        <ul className="evidence-list">{evidenceFor(history.entries, opponent, overlay.champion).rows.map(row => <li key={`${row.series.id}-${row.game.id}`}><span>{formatDate.format(new Date(row.series.startedAt))} · {teams[row.series.teamIds.find(id => id !== opponent)!]} · Game {row.game.number}</span><strong>{row.picked ? 'Picked' : row.banned ? 'Banned' : row.picked === null || row.banned === null ? 'Partial coverage' : 'Passed'}</strong></li>)}</ul>
-        {evidenceFor(history.entries, opponent, overlay.champion).rows.length === 0 && <p className="dialog-note">No eligible drafts in this sample.</p>}
+      {(draft || evidenceView) && <Dialog
+        title={draft ? `Game ${draft.game.number} draft` : `${champions[evidenceView!.champion]} scouting evidence`}
+        close={() => setOverlay(null)}
+        back={fromEvidence ? () => setOverlay(fromEvidence) : undefined}
+      >
+        {draft ? <>
+          <p className="dialog-note">{draft.series.teamIds.map(id => teams[id]).join(' vs ')} · {formatDate.format(new Date(draft.series.startedAt))}{draft.game.patch && ` · Patch ${draft.game.patch}`}</p>
+          <p className="dialog-note">{draft.game.winnerId ? `${teams[draft.game.winnerId]} won.` : 'The winner is unknown.'} {draft.game.coverage.picks ? 'Both teams carry these picks forward as lockouts.' : 'The feed has incomplete picks.'} {!draft.game.coverage.bans && 'The feed has incomplete bans.'}</p>
+          {draft.game.actions.length > 0 && <ol className="game-actions" aria-label="Recorded draft order">
+            {draft.game.actions.map((action, index) => <li key={`${action.championId}-${index}`}>
+              <span className="draft-order" aria-hidden="true">{index + 1}</span>
+              <ChampionPortrait name={champions[action.championId]} small />
+              <span><strong>{champions[action.championId]}</strong><small>{teams[action.teamId]}</small></span>
+              <span>{action.kind === 'pick' ? 'Pick' : 'Ban'}</span>
+            </li>)}
+          </ol>}
+        </> : evidenceView && evidence && <>
+          <p className="dialog-note">{opponentName} · {sampleLabel} · Earlier covered drafts</p>
+          {!evidence.rows.length && <p className="dialog-note">No eligible drafts for {champions[evidenceView.champion]} in this sample.</p>}
+          {evidence.samples.length > 0 && <ul className="evidence-list source-drafts">{evidence.samples.map(row => <li key={`${row.series.id}-${row.game.id}`}>
+            <button type="button" className="evidence-draft" onClick={() => setOverlay({ kind: 'game', series: row.series, game: row.game, from: evidenceView })}>
+              <span><strong>{teams[row.series.teamIds.find(id => id !== opponent)!]} · Game {row.game.number}</strong><small>{formatDate.format(new Date(row.series.startedAt))}</small></span>
+              <span>{row.locked ? 'Fearless-locked' : row.picked ? 'Picked' : row.banned ? 'Banned' : row.picked === null || row.banned === null ? 'Partial coverage' : 'Passed'}</span>
+              <ArrowUpRight size={15} aria-hidden="true" />
+            </button>
+          </li>)}</ul>}
+        </>}
       </Dialog>}
       {overlay?.kind === 'restrictions' && <Dialog title="Tournament restrictions" close={() => setOverlay(null)}>
         <p className="dialog-note">Exclude champions disabled for this series. Draft Reserve uses observed picks and bans as evidence for the patch and event.</p>

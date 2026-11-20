@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getSwapOptions, parsePack } from '../src/draft.ts';
+import { compareSwap, evidenceFor, getBackupOptions, getCheckpoint, getHistory, getObservedPool, getPlanOptions, getSwapOptions, parsePack } from '../src/draft.ts';
 import { demoPack } from '../src/demo.ts';
 import { championImage } from '../src/champion-art.ts';
 
@@ -55,6 +55,24 @@ test('a verified Game 4 ban cannot replace a pick in Game 4 but is available as 
   assert.ok(!getBackupOptions(swap, pool, new Set(['nerith'])).includes('nerith'));
 });
 
+test('a coaching plan can use the reopened pick or another verified champion, with a distinct backup', () => {
+  const pack = draftPack();
+  const [series] = pack.series;
+  const checkpoint = getCheckpoint(series, 5);
+  assert.equal(checkpoint.kind, 'ready');
+  const pool = getObservedPool(pack, series, checkpoint.previous);
+  const swap = compareSwap(checkpoint, 'morrow', 'vesper', getSwapOptions(checkpoint, pool, new Set()));
+  assert.ok(swap);
+  const restricted = new Set(['ilex']);
+  const primary = getPlanOptions(swap, pool.filter(id => id !== 'morrow'), restricted);
+  assert.ok(primary.includes('morrow'), 'The recorded pick supplies evidence that it was playable');
+  assert.ok(!primary.includes('vesper') && !primary.includes('ilex'));
+  const backups = getBackupOptions(swap, pool, restricted, 'calder');
+  assert.ok(backups.includes('morrow'));
+  assert.ok(!backups.includes('calder'));
+  assert.ok(!getPlanOptions(swap, pool, new Set(['morrow'])).includes('morrow'));
+});
+
 test('a sweep and incomplete draft feed produce different checkpoint states', () => {
   const [series] = draftPack().series;
   const [first, , third, fourth] = series.games;
@@ -105,7 +123,20 @@ test('the latest 20 scouting games exclude the current series, future series and
   assert.equal(earlier.entries[0].series.id, 'earlier-12');
   assert.equal(earlier.entries[0].game.number, 5);
   assert.ok(earlier.entries.every(({ game, series }) => game.number >= 3 && series.id.startsWith('earlier-')));
+  const exactGame = getHistory(pack, reference, 'emberline', 3);
+  assert.equal(exactGame.entries.length, 13, 'Apply the game filter before the 20-game cap');
+  assert.ok(exactGame.entries.every(({ game, series }) => game.number === 3 && series.id.startsWith('earlier-')));
   assert.equal(getHistory(pack, reference, 'emberline', 'All games', '99.99').entries.length, 0);
+});
+
+test('Game 5 scouting keeps lockout evidence and distinguishes no sample from no picks', () => {
+  const pack = draftPack();
+  const [reference] = pack.series;
+  const earlier = getHistory(pack, reference, 'emberline', 5);
+  const azir = evidenceFor(earlier.entries, 'emberline', 'morrow');
+  assert.deepEqual(azir.picks, { count: 0, eligible: 0 });
+  assert.ok(azir.samples.length > 0 && azir.samples.every(row => row.locked && row.game.number === 5));
+  assert.deepEqual(evidenceFor(earlier.entries, 'emberline', 'brunna').picks, { count: 0, eligible: earlier.entries.length });
 });
 
 test('the import rejects malformed schemas and claimed picks with unknown IDs', () => {

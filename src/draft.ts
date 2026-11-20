@@ -24,7 +24,7 @@ export type DraftPack = {
   series: DraftSeries[];
 };
 export type Checkpoint = 3 | 4 | 5;
-export type Cohort = 'Late series' | 'All games';
+export type Cohort = 'Late series' | 'All games' | Checkpoint;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -180,8 +180,13 @@ export function compareSwap(checkpoint: ReadyCheckpoint, original: string, repla
   return { reopened: original, locked: replacement, locks };
 }
 
-export function getBackupOptions(swap: NonNullable<ReturnType<typeof compareSwap>>, observed: readonly string[], disabled: ReadonlySet<string>) {
-  return observed.filter(id => !swap.locks.has(id) && id !== swap.reopened && !disabled.has(id));
+export function getPlanOptions(swap: NonNullable<ReturnType<typeof compareSwap>>, observed: readonly string[], disabled: ReadonlySet<string>) {
+  const candidates = new Set([swap.reopened, ...observed]);
+  return [...candidates].filter(id => !swap.locks.has(id) && !disabled.has(id));
+}
+
+export function getBackupOptions(swap: NonNullable<ReturnType<typeof compareSwap>>, observed: readonly string[], disabled: ReadonlySet<string>, primary = swap.reopened) {
+  return getPlanOptions(swap, observed, disabled).filter(id => id !== primary);
 }
 
 type HistoryEntry = { series: DraftSeries; game: DraftGame; priorLocks: ReadonlySet<string> };
@@ -195,7 +200,7 @@ export function getHistory(pack: DraftPack, reference: DraftSeries, teamId: stri
   for (const series of older) {
     const games = [...series.games].sort((a, b) => b.number - a.number);
     for (const game of games) {
-      if ((cohort === 'Late series' && game.number < 3) || (patch && game.patch !== patch)) continue;
+      if ((typeof cohort === 'number' && game.number !== cohort) || (cohort === 'Late series' && game.number < 3) || (patch && game.patch !== patch)) continue;
       const prefix = getPrefix(series, game.number - 1);
       if ('missing' in prefix || (!game.coverage.picks && !game.coverage.bans) ||
           game.actions.some(action => (action.kind === 'pick' ? game.coverage.picks : game.coverage.bans) && prefix.picks.has(action.championId))) {
@@ -209,14 +214,17 @@ export function getHistory(pack: DraftPack, reference: DraftSeries, teamId: stri
 }
 
 export function evidenceFor(entries: readonly HistoryEntry[], teamId: string, champion: string) {
-  const rows = entries.filter(({ priorLocks }) => !priorLocks.has(champion)).map(({ series, game }) => ({
+  const samples = entries.map(({ series, game, priorLocks }) => ({
     series,
     game,
+    locked: priorLocks.has(champion),
     picked: game.coverage.picks ? game.actions.some(action => action.kind === 'pick' && action.teamId === teamId && action.championId === champion) : null,
     banned: game.coverage.bans ? game.actions.some(action => action.kind === 'ban' && action.teamId === teamId && action.championId === champion) : null,
   }));
+  const rows = samples.filter(row => !row.locked);
   return {
     rows,
+    samples,
     picks: { count: rows.filter(row => row.picked === true).length, eligible: rows.filter(row => row.picked !== null).length },
     bans: { count: rows.filter(row => row.banned === true).length, eligible: rows.filter(row => row.banned !== null).length },
   };

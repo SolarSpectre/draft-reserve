@@ -13,7 +13,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. The fictional Northstar–Emberline series opens at 2–2 with Azir exchanged for Orianna in Game 4. Use **Replacement** to try a different pick, **Replay swap** to replay the lockout change, and an opponent scouting row to inspect the matches behind its pick and ban counts. **Watch briefing** opens an eight-second explainer. Champion portraits are official Riot Data Dragon assets.
+Open the URL printed by Vite. The fictional Northstar–Emberline series opens at 2–2 with Azir exchanged for Orianna in Game 4. Compare **Keep Azir** and **Use Orianna** in the Game 5 prep plan, then choose a primary and backup and select **Copy prep note**. In **Opponent scouting**, switch from **Late series** to **Game 5** and open Azir’s evidence. Select a source row to inspect that match’s draft order. Use **Replacement** to try a different swap. **Watch briefing** opens an eight-second explainer. Champion portraits are official Riot Data Dragon assets.
 
 ## Import a GRID draft pack
 
@@ -25,7 +25,7 @@ git -C ../stl-hackathon-2026-grid-starter sparse-checkout set lol meta
 python scripts/import_grid.py --data-dir ../stl-hackathon-2026-grid-starter --output local-grid/lcs.json
 ```
 
-In Draft Reserve, choose **Import draft file**, then select `local-grid/lcs.json`. The app prioritizes a covered Cloud9 best-of-five that reaches Game 5. Open **Game 4** on the timeline to see its actual pick/ban order. Choose a replacement and a backup, then open a scouting row to check the evidence. **Our team** switches the scouting opponent. The browser reads the file in memory. Choose **Return to demo** to discard the imported session.
+In Draft Reserve, choose **Import draft file**, then select `local-grid/lcs.json`. The app prioritizes a covered Cloud9 best-of-five that reaches Game 5. Open **Game 4** on the timeline to see its actual pick/ban order. Choose a replacement, a primary, and a backup, then open an opponent scouting row to check the evidence. **Our team** switches the scouting opponent. The browser reads the file in memory. Choose **Return to demo** to discard the imported session.
 
 The default import selects the 2026 LCS splits. To test a small checkout, repeat `--series-id` for each downloaded series ID. Include earlier opponents' series if you want scouting evidence in addition to the replay.
 
