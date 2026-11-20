@@ -234,7 +234,7 @@ footer a { color: var(--accent); }
 .draft-order { color: var(--muted); font-size: 13px; }
 .evidence-list > li { grid-template-columns: minmax(0, 1fr) auto; }
 .restrictions-list > li { display: block; padding: 0; }
-.restrictions-list label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.restrictions-list label { display: grid; grid-template-columns: 16px 28px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 44px; padding-inline: 4px; overflow-wrap: anywhere; cursor: pointer; }
 .restrictions-list label:hover { background: var(--accent-tint); }
 
 @media (max-width: 1010px) {

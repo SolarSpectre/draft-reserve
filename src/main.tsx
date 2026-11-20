@@ -433,7 +433,15 @@ function App() {
       </Dialog>}
       {overlay?.kind === 'restrictions' && <Dialog title="Tournament restrictions" close={() => setOverlay(null)}>
         <p className="dialog-note">Exclude champions disabled for this series. Draft Reserve uses observed picks and bans as evidence for the patch and event.</p>
-        <ul className="evidence-list restrictions-list">{restrictions.map(id => <li key={id}><label><input type="checkbox" checked={disabled.includes(id)} onChange={() => toggleRestriction(id)} /> {champions[id]}</label></li>)}</ul>
+        <ul className="evidence-list restrictions-list">
+          {restrictions.map(id => <li key={id}>
+            <label>
+              <input type="checkbox" checked={disabled.includes(id)} onChange={() => toggleRestriction(id)} />
+              <ChampionPortrait name={champions[id]} small />
+              <span>{champions[id]}</span>
+            </label>
+          </li>)}
+        </ul>
       </Dialog>}
     </MotionConfig>
   );
